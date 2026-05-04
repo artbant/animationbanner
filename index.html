@@ -699,7 +699,7 @@ button.recording { background: var(--danger); color: #fff; animation: pulse 1.2s
 
 <script>
 // Дефолтный фон — видео из соседнего файла. Если файл недоступен — fallback на сплошной оранжевый.
-const DEFAULT_BG_VIDEO_URL = 'default_bg.mov';
+const DEFAULT_BG_VIDEO_URL = 'default_bg.mp4';
 
 const state = {
   template: 'header', // 'header' | 'showcase'
@@ -852,7 +852,7 @@ ctx.imageSmoothingQuality = 'high';
 
 function resizeCanvas() {
   // RENDER_SCALE зависит от шаблона
-  RENDER_SCALE = (state.template === 'showcase') ? 3 : 2;
+  RENDER_SCALE = (state.template === 'showcase') ? 3 : 4;
   canvas.width = state.width * RENDER_SCALE;
   canvas.height = state.height * RENDER_SCALE;
   // Превью: header=1×, showcase=1× (т.к. 328×200 уже компактный)
@@ -886,7 +886,7 @@ defaultBgVideo.addEventListener('loadeddata', () => {
   defaultBgVideo.play().catch(() => {});
 });
 defaultBgVideo.addEventListener('error', () => {
-  console.warn('default_bg.mov не загружен — будет сплошной оранжевый фон');
+  console.warn('default_bg.mp4 не загружен — будет сплошной оранжевый фон');
 });
 
 // ============== AUTOREVERSE VIDEO PLAYBACK ==============
@@ -2131,10 +2131,47 @@ async function startRecording(format, targetW, targetH, labelW, labelH) {
   const outCtx = outCanvas.getContext('2d');
   outCtx.imageSmoothingEnabled = true;
   outCtx.imageSmoothingQuality = 'high';
+
+  // Если master в несколько раз больше target — делаем многошаговый downscale
+  // (это даёт более чистые контуры, особенно у текста — лесенки/шакалы исчезают)
+  const downRatio = canvas.width / outCanvas.width;
+  const useMultistep = downRatio >= 1.6;
+  let stepCanvas = null, stepCtx = null;
+  if (useMultistep) {
+    stepCanvas = document.createElement('canvas');
+    stepCtx = stepCanvas.getContext('2d');
+    stepCtx.imageSmoothingEnabled = true;
+    stepCtx.imageSmoothingQuality = 'high';
+  }
   let outStop = false;
   function pumpOut() {
     if (outStop) return;
-    outCtx.drawImage(canvas, 0, 0, outCanvas.width, outCanvas.height);
+    if (useMultistep) {
+      // Halving until close to target, then final draw
+      let curSrc = canvas;
+      let curW = canvas.width, curH = canvas.height;
+      while (curW * 0.5 > outCanvas.width) {
+        const nextW = Math.max(outCanvas.width, Math.floor(curW * 0.5));
+        const nextH = Math.max(outCanvas.height, Math.floor(curH * 0.5));
+        stepCanvas.width = nextW; stepCanvas.height = nextH;
+        stepCtx.imageSmoothingEnabled = true;
+        stepCtx.imageSmoothingQuality = 'high';
+        stepCtx.clearRect(0, 0, nextW, nextH);
+        stepCtx.drawImage(curSrc, 0, 0, nextW, nextH);
+        // Создаём snapshot чтобы переиспользовать stepCanvas на след итерации
+        // (drawImage с того же канваса — ОК, но мы получаем stepCanvas как новый source)
+        curSrc = stepCanvas;
+        curW = nextW; curH = nextH;
+        // На след итерации stepCanvas будет переписан — нужен дополнительный canvas
+        // Простое решение: чередуем два canvas
+        // Для простоты: остановимся когда дальше уменьшать не нужно — последний шаг делает outCtx
+        break; // делаем один промежуточный шаг (этого достаточно для 4×→2×→1×)
+      }
+      outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+      outCtx.drawImage(curSrc, 0, 0, outCanvas.width, outCanvas.height);
+    } else {
+      outCtx.drawImage(canvas, 0, 0, outCanvas.width, outCanvas.height);
+    }
     requestAnimationFrame(pumpOut);
   }
   pumpOut();
@@ -2143,7 +2180,9 @@ async function startRecording(format, targetW, targetH, labelW, labelH) {
   let mimeCandidates, extension;
   if (format === 'mp4') {
     mimeCandidates = [
-      'video/mp4;codecs=avc1.42E01E',
+      'video/mp4;codecs=avc1.640032',  // High Profile, Level 5.0 — лучше для текста
+      'video/mp4;codecs=avc1.640028',  // High Profile, Level 4.0
+      'video/mp4;codecs=avc1.42E01E',  // Baseline (fallback)
       'video/mp4;codecs=avc1',
       'video/mp4;codecs=h264',
       'video/mp4',
