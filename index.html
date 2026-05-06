@@ -819,6 +819,8 @@ function updateConditionalUI() {
   // Найдём через title — скроем секции «Плашка снизу» и «Плашка — стиль» в showcase
   const sections = document.querySelectorAll('aside .section');
   sections.forEach(sec => {
+    // Секции, обрабатываемые отдельно ниже:
+    if (sec.id === 'showcaseSection' || sec.id === 'sparklesSection') return;
     const title = sec.querySelector('.section-title');
     if (!title) return;
     const txt = title.textContent.trim();
@@ -836,10 +838,12 @@ function updateConditionalUI() {
         }
       }
     } else {
-      // Не showcase — возвращаем pro-only-секции в нормальный режим
-      if (txt === 'Плашка снизу') sec.style.display = '';
-      else if (txt === 'Плашка — стиль' || txt === 'Общие настройки фото') {
+      // Узкий баннер — для всех секций сбрасываем inline display,
+      // чтобы CSS правила корректно отработали (pro-only видна только в Pro)
+      if (sec.classList.contains('pro-only')) {
         sec.style.display = state.pro ? '' : 'none';
+      } else {
+        sec.style.display = '';
       }
     }
   });
@@ -3071,21 +3075,12 @@ function endDrag(ev) {
     : (dragState.kind === 'move-sparkles') ? 'sparkles'
     : (dragState.sel && dragState.sel.kind) || null;
 
-  // Синхронизация UI ползунков плашки
+  // Синхронизация UI слайдера размера плашки (X/Y/rotate ползунки убраны — двигаются на баннере)
   if (changedKind === 'badge') {
-    const ids = ['badgeX', 'badgeY', 'badgeRot', 'badgeSize'];
-    const vals = [
-      [state.badge.x, 'px', 'badgeXVal'],
-      [state.badge.y, 'px', 'badgeYVal'],
-      [state.badge.rotate, '°', 'badgeRotVal'],
-      [state.badge.size, '%', 'badgeSizeVal'],
-    ];
-    ids.forEach((id, i) => {
-      const el = document.getElementById(id);
-      const valEl = document.getElementById(vals[i][2]);
-      if (el) el.value = vals[i][0];
-      if (valEl) valEl.textContent = vals[i][0] + vals[i][1];
-    });
+    const sizeEl = document.getElementById('badgeSize');
+    const sizeVal = document.getElementById('badgeSizeVal');
+    if (sizeEl) sizeEl.value = state.badge.size;
+    if (sizeVal) sizeVal.textContent = state.badge.size + '%';
   }
   dragState = null;
   try { canvasWrap.releasePointerCapture(ev.pointerId); } catch(_){}
@@ -3120,14 +3115,9 @@ rebuildExportSizesUI();
 updateConditionalUI();
 loop();
 
-// при переключении Pro нужно перерисовать per-face блоки чтобы скрыть/показать слайдеры X/Y
-const _oldSetMode = setMode;
-window.setMode = function(pro) {
-  _oldSetMode(pro);
-  rebuildPerFaceControls();
-};
-document.getElementById('modeSimple').addEventListener('click', () => rebuildPerFaceControls());
-document.getElementById('modePro').addEventListener('click', () => rebuildPerFaceControls());
+// При переключении Pro/Simple перерисовать per-face блоки чтобы скрыть/показать слайдеры X/Y
+btnSimple.addEventListener('click', () => rebuildPerFaceControls());
+btnPro.addEventListener('click', () => rebuildPerFaceControls());
 </script>
 
 </body>
