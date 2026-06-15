@@ -3150,7 +3150,20 @@ rebuildPerFaceControls();
 rebuildTextsUI();
 rebuildExportSizesUI();
 updateConditionalUI();
-loop();
+
+// Загружаем OK Sans Display через FontFace API (нужно для Canvas)
+(async () => {
+  try {
+    const fontReg = new FontFace('OK Sans Display', "url('OK_Sans_Display_Regular.otf')", { weight: '400' });
+    const fontBold = new FontFace('OK Sans Display', "url('OK_Sans_Display_Bold.otf')", { weight: '700' });
+    const [r, b] = await Promise.all([fontReg.load(), fontBold.load()]);
+    document.fonts.add(r);
+    document.fonts.add(b);
+  } catch(e) {
+    console.warn('OK Sans Display не загружен:', e);
+  }
+  loop();
+})();
 
 // при переключении Pro нужно перерисовать per-face блоки чтобы скрыть/показать слайдеры X/Y
 const _oldSetMode = setMode;
